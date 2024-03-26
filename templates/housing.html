@@ -1,0 +1,170 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<title>House Price</title>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="/static/css/main.css" />
+		<noscript><link rel="stylesheet" href="/static/css/noscript.css" /></noscript>
+	</head>
+	
+	<body class="is-preload">
+		<!-- Wrapper -->
+			<div id="wrapper">
+
+				<!-- Header -->
+					<header id="header">
+						<div class="inner">
+							<!-- Nav -->
+								<nav>
+									<ul>
+										<li><a href="#menu">Menu</a></li>
+									</ul>
+								</nav>
+
+						</div>
+					</header>
+
+				<!-- Menu -->
+				<nav id="menu">
+					<h2>Menu</h2>
+					<ul>
+						<li><a href="index.html">Home</a></li>
+						<li><a href="blog.html">Blog</a></li>
+						<li><a href="neuralnetwork.html">Artificial Neural Network</a></li>
+						<li><a href="carbonization.html">Carbonization Analysis</a></li>
+						<li><a href="breastcancer.html">Breast Cancer Detection</a></li>
+						<li><a href="modelingEth.html">Modeling Ethereum</a></li>
+						<li><a href="lectures.html">Lecture Notes</a></li>
+						<li><a href="papers.html">Papers</a></li>
+						<li><a href="resume.html">Resume</a></li>
+                        <li><a href="thesis.html">Thesis</a></li>
+					</ul>
+				</nav>
+
+				<!-- Main -->
+					<div id="main">
+						<div class="inner">
+							<h1>Forcasting Selling Price of Houses in the U.S.</h1>
+							<center>
+								<video width="1000" height="700" controls>
+									<source src="/static/css/houses.mp4" type="video/mp4">
+									Your browser does not support the video tag.
+								</video>
+							</center>
+							<h4>March 20, 2024</h4>
+							 <p>
+                                Hi team,<br>
+                                The data we will be using is generously provided by Zillow. We will look at the average sale price of 
+                                houses by city and month. We have montly data for all months since 1996. The goal is to fit a forcasting 
+                                model to predict the trend for cities of personal interest; we will utilize the Prophet Model to do so.
+                                I've taken the liberty to complete some initial exploratory data analysis as shown above.
+                                <br><br>
+                                Most notably, I've created an interface for you to input your city and forecast length so that you can observe
+                                and explore the forecasted trends and prediction metrics computed by the Prophet model. This model is notorious for it's accuracy and 
+                                flexibility. Housing prices are atypically volatile so this model does particularly well at producing accurate forecasts. 
+                             </p>
+
+							
+							<form id="nameForm" action="/forecast" method="POST">
+								<div class="row gtr-uniform">
+									<div class="col-4 col-12-xsmall">
+										<input type="text" name="city" id="city" value="" placeholder="City" required/>
+									</div>
+
+								<div class="col-4">
+									<select name="state" id="state" required>
+										<option value="">- State -</option>
+										<option value="AL">AL</option>
+										<option value="AK">AK</option>
+										<option value="AZ">AZ</option>
+										<option value="AR">AR</option>
+										<option value="CA">CA</option>
+										<option value="CO">CO</option>
+										<option value="CT">CT</option>
+										<option value="DE">DE</option>
+										<option value="FL">FL</option>
+										<option value="GA">GA</option>
+										<option value="HI">HI</option>
+										<option value="ID">ID</option>
+										<option value="IL">IL</option>
+										<option value="IN">IN</option>
+										<option value="IA">IA</option>
+										<option value="KS">KS</option>
+										<option value="KY">KY</option>
+										<option value="LA">LA</option>
+										<option value="ME">ME</option>
+										<option value="MD">MD</option>
+										<option value="MA">MA</option>
+										<option value="MI">MI</option>
+										<option value="MN">MN</option>
+										<option value="MS">MS</option>
+										<option value="MO">MO</option>
+										<option value="MT">MT</option>
+										<option value="NE">NE</option>
+										<option value="NV">NV</option>
+										<option value="NH">NH</option>
+										<option value="NJ">NJ</option>
+										<option value="NM">NM</option>
+										<option value="NY">NY</option>
+										<option value="NC">NC</option>
+										<option value="ND">ND</option>
+										<option value="OH">OH</option>
+										<option value="OK">OK</option>
+										<option value="OR">OR</option>
+										<option value="PA">PA</option>
+										<option value="RI">RI</option>
+										<option value="SC">SC</option>
+										<option value="SD">SD</option>
+										<option value="TN">TN</option>
+										<option value="TX">TX</option>
+										<option value="UT">UT</option>
+										<option value="VT">VT</option>
+										<option value="VA">VA</option>
+										<option value="WA">WA</option>
+										<option value="WV">WV</option>
+										<option value="WI">WI</option>
+										<option value="WY">WY</option>
+									</select>
+								</div>
+
+								<div class="col-4 col-12-xsmall">
+									<input type="text" name="period" id="period" placeholder="Forecast Period (# of future years to predict)" required/>
+								</div>
+								</div>
+
+								<br><br>
+								<button type="submit">Submit</button>
+								<div id="output"></div>
+
+
+							</form>
+
+						</div>
+					</div>
+
+				<!-- Footer -->
+				<footer id="footer">
+					<div class="inner">
+						<section>
+							<h2>Contact Me</h2>
+							<p><strong>Email: </strong>smulherin519@gmail.com<br><strong>Location: </strong>Los Angeles, CA</p>
+						</section>
+						<section>
+							<h2>Follow</h2>
+							<ul class="icons">
+								<li><a href="https://www.linkedin.com/in/sean-mulherin-93640913a/" target="_blank"><span class="label">Linkedin</span></a></li>
+								<li><a href="https://github.com/SeanMulherin" target="_blank"><span class="label">GitHub</span></a></li>
+							</ul>
+						</section>
+						<ul class="copyright">
+							<li>&copy; Sean Mulherin. All rights reserved</li>
+						</ul>
+					</div>
+				</footer>
+
+			</div>
+
+
+	</body>
+</html>
