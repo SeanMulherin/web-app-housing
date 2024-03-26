@@ -34,7 +34,7 @@ def house_fcst(name, period):
     ax1.set_xlabel('Date')
     ax1.set_ylabel('AVG Selling Price (USD)')
     ax1.plot(df.index[-1], df.y[-1], 'bo')
-    ax1.text(df.index[-5], df.y[-1] - 15000, f'${obs_price:.2f}')
+    ax1.text(df.index[-1], df.y[-1] - 15000, f'${obs_price:.2f}')
 
 
     plot_bytes_io1 = io.BytesIO()
