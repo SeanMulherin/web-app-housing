@@ -3370,6 +3370,11 @@ input, select, textarea {
   cursor: pointer;
 }
 
+video {
+	height: auto;
+	width: 100%;
+  }
+
 
 
 
