@@ -13,8 +13,8 @@ import io
 app = Flask(__name__, static_url_path='/static')
 
 
-h = pd.read_csv('static/css/housing.csv')
-h = h.drop(['RegionID', 'SizeRank', 'RegionType', 'StateName'], axis=1)
+h = pd.read_csv('static/css/zillow.csv')
+h = h.drop(['RegionID', 'SizeRank', 'RegionType', 'StateName', 'State', 'Metro', 'CountyName'], axis=1)
 h = np.transpose(h)
 h.columns = h.iloc[0, ]
 h = h.drop('RegionName', axis=0)
