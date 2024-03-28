@@ -15,10 +15,12 @@ app = Flask(__name__, static_url_path='/static')
 url='https://drive.google.com/file/d/1xx9u956zag8992-Vf5hFgKg9JkqvVh1J/view?usp=drive_link'
 url='https://drive.google.com/uc?id=' + url.split('/')[-2]
 h = pd.read_csv(url)
-h = h.drop(['RegionID', 'SizeRank', 'RegionType', 'StateName', 'State', 'Metro', 'CountyName'], axis=1)
+h = h.drop(['RegionID', 'SizeRank', 'RegionType', 'StateName', 'Metro', 'CountyName'], axis=1)
+h.insert(0, 'Location', h['RegionName'] + ', ' + h['State'])
+h = h.drop(['RegionName', 'State'], axis=1)
 h = np.transpose(h)
 h.columns = h.iloc[0, ]
-h = h.drop('RegionName', axis=0)
+h = h.drop('Location', axis=0)
 h.index = pd.to_datetime(h.index)
 h.index.name = 'date'
 h = h.astype(float)
