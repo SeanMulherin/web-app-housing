@@ -24,6 +24,7 @@ h = h.drop('Location', axis=0)
 h.index = pd.to_datetime(h.index)
 h.index.name = 'date'
 h = h.astype(float)
+country_avg = h.mean(axis=1)
 
 
 def house_fcst(name, period):
@@ -32,12 +33,14 @@ def house_fcst(name, period):
     obs_price = df.y[-1]
 
     fig, ax1 = plt.subplots(figsize=(10, 5))
-    ax1.plot(df.index, df.y, color='firebrick')
+    ax1.plot(df.index, df.y, color='firebrick', label='City AVG')
+    ax1.plot(country_avg, color='black', label='Country AVG')
     ax1.set_title(f"AVG Monthly House Price - {name}", size='x-large', color='blue')
     ax1.set_xlabel('Date')
     ax1.set_ylabel('AVG Selling Price (USD)')
     ax1.plot(df.index[-1], df.y[-1], 'bo')
     ax1.text(df.index[-1] + timedelta(200), df.y[-1] - 15000, f'${obs_price:.2f}')
+    ax1.legend()
 
 
     plot_bytes_io1 = io.BytesIO()
@@ -47,7 +50,6 @@ def house_fcst(name, period):
     plot_html1 = f'<img src="data:image/png;base64,{plot_base641}" alt="plot" />'
 
     plt.close()
-
 
 
     df = df.reset_index()
@@ -72,11 +74,13 @@ def house_fcst(name, period):
 
     fig, ax = plt.subplots(figsize=(10, 5))
     model.plot(pred, ax=ax)
+    ax.plot(country_avg, color='red', label='Observed Country AVG')
     ax.set_title(f'Forecast Model of House Prices in {name}')
     ax.plot(pred.ds.iloc[-1], fcst_price, 'bo')
     ax.text(pred.ds.iloc[-1] + timedelta(days=50), fcst_price, f"${fcst_price:.2f}")
     ax.set_xlabel('Date')
     ax.set_ylabel('AVG Selling Price (USD)')
+    ax.legend()
 
     plot_bytes_io = io.BytesIO()
     plt.savefig(plot_bytes_io, format='png')
