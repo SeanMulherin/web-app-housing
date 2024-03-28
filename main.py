@@ -12,8 +12,9 @@ import io
 
 app = Flask(__name__, static_url_path='/static')
 
-
-h = pd.read_csv('https://drive.google.com/file/d/1xx9u956zag8992-Vf5hFgKg9JkqvVh1J/view?usp=drive_link')
+url='https://drive.google.com/file/d/1xx9u956zag8992-Vf5hFgKg9JkqvVh1J/view?usp=drive_link'
+url='https://drive.google.com/uc?id=' + url.split('/')[-2]
+h = pd.read_csv(url)
 h = h.drop(['RegionID', 'SizeRank', 'RegionType', 'StateName', 'State', 'Metro', 'CountyName'], axis=1)
 h = np.transpose(h)
 h.columns = h.iloc[0, ]
