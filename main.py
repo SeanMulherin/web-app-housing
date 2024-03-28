@@ -107,6 +107,7 @@ def index():
 @app.route('/forecast', methods=['POST'])
 def forecast():
     city = request.form['city']
+    city = city.strip()
     state = request.form['state']
     location = city.title() + ", " + state.upper()
     period = int(request.form['period'])
