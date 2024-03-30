@@ -41,7 +41,7 @@ def house_fcst(name, period):
     ax1.plot(df.index[-1], df.y[-1], 'bo')
     ax1.axhline(df.y[-1], ls='dashed', alpha=0.2, color='black')
     ax1.axvline(df.index[-1], ls='dashed', alpha=0.2, color='black')
-    ax1.text(df.index[-1] + timedelta(300), df.y[-1] - 15000, f'${obs_price:.2f}')
+    ax1.text(df.index[-1] + timedelta(500), df.y[-1], f'${obs_price:.2f}')
     ax1.legend()
 
 
@@ -81,7 +81,7 @@ def house_fcst(name, period):
     ax.plot(pred.ds.iloc[-1], fcst_price, 'bo')
     ax.axhline(fcst_price, ls='dashed', alpha=0.2, color='black')
     ax.axvline(pred.ds.iloc[-1], ls='dashed', alpha=0.2, color='black')
-    ax.text(pred.ds.iloc[-1] + timedelta(days=100), fcst_price, f"${fcst_price:.2f}")
+    ax.text(pred.ds.iloc[-1] + timedelta(days=500), fcst_price, f"${fcst_price:.2f}")
     ax.set_xlabel('Date')
     ax.set_ylabel('AVG Selling Price (USD)')
     ax.legend()
