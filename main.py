@@ -39,6 +39,8 @@ def house_fcst(name, period):
     ax1.set_xlabel('Date')
     ax1.set_ylabel('AVG Selling Price (USD)')
     ax1.plot(df.index[-1], df.y[-1], 'bo')
+    ax1.axhline(df.y[-1], ls='dashed', alpha=0.2, color='black')
+    ax1.axvline(df.index[-1], ls='dashed', alpha=0.2, color='black')
     ax1.text(df.index[-1] + timedelta(200), df.y[-1] - 15000, f'${obs_price:.2f}')
     ax1.legend()
 
@@ -77,6 +79,8 @@ def house_fcst(name, period):
     ax.plot(country_avg, color='red', label='Observed Country AVG')
     ax.set_title(f'Forecast Model of House Prices in {name}')
     ax.plot(pred.ds.iloc[-1], fcst_price, 'bo')
+    ax.axhline(fcst_price, ls='dashed', alpha=0.2, color='black')
+    ax.axvline(pred.ds.iloc[-1], ls='dashed', alpha=0.2, color='black')
     ax.text(pred.ds.iloc[-1] + timedelta(days=50), fcst_price, f"${fcst_price:.2f}")
     ax.set_xlabel('Date')
     ax.set_ylabel('AVG Selling Price (USD)')
