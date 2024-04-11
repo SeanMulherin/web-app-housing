@@ -123,8 +123,8 @@ def forecast():
     if location not in h.columns:
         result = f"ERROR: {location} IS EITHER MISSPELLED OR NOT IN THE DATABASE. PLEASE GO BACK A PAGE AND TRY AGAIN."
         return render_template('result.html', result=result)
-    elif period < 0:
-        result = f"ERROR: FORECAST LENGTH MUST BE POSITIVE. YOU INPUT {period} AS YOUR FORECAST LENGTH. PLEASE GO BACK A PAGE AND TRY AGAIN."
+    elif period <= 0:
+        result = f"ERROR: FORECAST LENGTH MUST BE A POSITIVE INTEGER. YOU INPUT {period} AS YOUR FORECAST LENGTH. PLEASE GO BACK A PAGE AND TRY AGAIN."
         return render_template('result.html', result=result)
     else:
         result,plot_html1, plot_html, components_html = house_fcst(location, period)
