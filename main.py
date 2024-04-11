@@ -118,16 +118,17 @@ def forecast():
     city = city.strip()
     state = request.form['state']
     location = city.title() + ", " + state.upper()
-    period = int(request.form['period'])
+    period = float(request.form['period'])
+    period_int = int(period)
 
     if location not in h.columns:
         result = f"ERROR: {location} IS EITHER MISSPELLED OR NOT IN THE DATABASE. PLEASE GO BACK A PAGE AND TRY AGAIN."
         return render_template('result.html', result=result)
-    elif period <= 0:
-        result = f"ERROR: FORECAST LENGTH MUST BE A POSITIVE INTEGER. YOU INPUT {period} AS YOUR FORECAST LENGTH. PLEASE GO BACK A PAGE AND TRY AGAIN."
+    elif period_int <= 0:
+        result = f"ERROR: FORECAST LENGTH MUST BE A POSITIVE INTEGER > 0. YOU INPUT {period} AS YOUR FORECAST LENGTH. PLEASE GO BACK A PAGE AND TRY AGAIN."
         return render_template('result.html', result=result)
     else:
-        result,plot_html1, plot_html, components_html = house_fcst(location, period)
+        result,plot_html1, plot_html, components_html = house_fcst(location, period_int)
         return render_template('result.html', result=result, plot_html1=plot_html1, plot_html=plot_html, components_html=components_html)
 
 
