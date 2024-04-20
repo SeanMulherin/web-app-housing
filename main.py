@@ -27,7 +27,7 @@ h = h.astype(float)
 country_avg = h.mean(axis=1)
 
 
-def house_fcst(name, period):
+def house_fcst(name, period, period_unit):
     if period_unit == "year":
         period = period*12
 
