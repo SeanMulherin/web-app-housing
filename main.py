@@ -106,8 +106,11 @@ def house_fcst(name, period, period_unit):
 
     plt.close(components_fig)
 
+    if period_unit == "year":
+        period = period/12
+
     return (f"Housing prices in {name} have {past_decade_pctch_bool} by {past_decade_pctch:.2f}% in the past decade "
-            f"and are predicted to {future_pctch_bool} by {future_pctch:.2f}% in the next {period} {period_unit}(s).", 
+            f"and are predicted to {future_pctch_bool} by {future_pctch:.2f}% in the next {int(period)} {period_unit}(s).", 
             plot_html1, plot_html, components_html)
 
 
@@ -132,7 +135,7 @@ def forecast():
         result = f"ERROR: FORECAST LENGTH MUST BE A POSITIVE INTEGER > 0. YOU INPUT {period} AS YOUR FORECAST LENGTH. PLEASE GO BACK A PAGE AND TRY AGAIN."
         return render_template('result.html', result=result)
     else:
-        result,plot_html1, plot_html, components_html = house_fcst(location, period_int)
+        result,plot_html1, plot_html, components_html = house_fcst(location, period_int, period_unit)
         return render_template('result.html', result=result, plot_html1=plot_html1, plot_html=plot_html, components_html=components_html)
 
 
