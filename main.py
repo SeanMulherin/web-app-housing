@@ -28,6 +28,9 @@ country_avg = h.mean(axis=1)
 
 
 def house_fcst(name, period):
+    if period_unit == "year":
+        period = period*12
+
     df = h.loc[:, name].to_frame()
     df.columns = ['y']
     obs_price = df.y[-1]
@@ -59,12 +62,12 @@ def house_fcst(name, period):
 
     model = Prophet(yearly_seasonality=True)
     model_fit = model.fit(df)
-    future = model_fit.make_future_dataframe(periods=period * 12, freq='M')
+    future = model_fit.make_future_dataframe(periods=period, freq='M')
     pred = model_fit.predict(future)
 
     fcst_price = pred.yhat[len(pred) - 1]
-    future_pctch = 100 * (pred.trend.iloc[-1] - pred.trend[len(pred) - period * 12 - 1]) / pred.trend[
-        len(pred) - period * 12 - 1]
+    future_pctch = 100 * (pred.trend.iloc[-1] - pred.trend[len(pred) - period - 1]) / pred.trend[
+        len(pred) - period - 1]
     past_decade_pctch = 100 * (df.y.iloc[-1] - df.y.iloc[-12 * 10]) / df.y.iloc[-12 * 10]
 
     future_pctch_bool = "decrease"
@@ -104,7 +107,7 @@ def house_fcst(name, period):
     plt.close(components_fig)
 
     return (f"Housing prices in {name} have {past_decade_pctch_bool} by {past_decade_pctch:.2f}% in the past decade "
-            f"and are predicted to {future_pctch_bool} by {future_pctch:.2f}% in the next {period} year(s).", 
+            f"and are predicted to {future_pctch_bool} by {future_pctch:.2f}% in the next {period} {period_unit}(s).", 
             plot_html1, plot_html, components_html)
 
 
@@ -120,6 +123,7 @@ def forecast():
     location = city.title() + ", " + state.upper()
     period = float(request.form['period'])
     period_int = int(period)
+    period_unit = request.form['period_unit']
 
     if location not in h.columns:
         result = f"ERROR: {location} IS EITHER MISSPELLED OR NOT IN THE DATABASE. PLEASE GO BACK A PAGE AND TRY AGAIN."
