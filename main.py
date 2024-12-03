@@ -10,10 +10,14 @@ from prophet import Prophet
 import base64
 import io
 
+# File ID
+file_id = "1V5-1tvSR3G0jVbiAyn3-m8A8-vI7hKjD"
+
+# Construct the download URL
+url = f"https://drive.google.com/uc?id={file_id}"
+
 app = Flask(__name__, static_url_path='/static')
 
-url='https://drive.google.com/file/d/1V5-1tvSR3G0jVbiAyn3-m8A8-vI7hKjD/view?usp=sharing'
-url='https://drive.google.com/uc?id=' + url.split('/')[-2]
 h = pd.read_csv(url)
 h = h.drop(['RegionID', 'SizeRank', 'RegionType', 'StateName', 'Metro', 'CountyName'], axis=1)
 h.insert(0, 'Location', h['RegionName'] + ', ' + h['State'])
