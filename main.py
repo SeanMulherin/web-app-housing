@@ -19,7 +19,7 @@ url = f"https://drive.google.com/uc?id={file_id}"
 app = Flask(__name__, static_url_path='/static')
 
 h = pd.read_csv(url)
-h = h.drop(['RegionID', 'SizeRank', 'RegionType', 'StateName', 'Metro', 'CountyName'], axis=1)
+h = h.drop(['RegionID', 'SizeRank', 'RegionType', 'StateName'], axis=1)
 h.insert(0, 'Location', h['RegionName'] + ', ' + h['State'])
 h = h.drop(['RegionName', 'State'], axis=1)
 h = np.transpose(h)
