@@ -103,6 +103,10 @@
 
 						<h2>Comparable Properties</h2>
 						{% if analysis.comparables %}
+							{% if comparable_plot_html %}
+								<div class="plot-container">{{ comparable_plot_html | safe }}</div>
+							{% endif %}
+
 							<div class="table-wrapper">
 								<table>
 									<thead>
