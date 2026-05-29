@@ -1,6 +1,6 @@
-prophet
-gunicorn
 flask
+gunicorn
 matplotlib
-datetime
-
+numpy
+pandas
+prophet

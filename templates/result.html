@@ -44,21 +44,21 @@
 				<!-- Main -->
 					<div id="main">
 						<div class="inner">
-							<h1>Forcasting Selling Price of Houses in the U.S.</h1>
+							<h1>Forecasting Selling Price of Houses in the U.S.</h1>
 
 							<h2>Forecast Result</h2>
 							<p>{{ result }}</p>
 
 							<h2>Observed Prices</h2>
-							<div>{{ plot_html1 | safe }}</div>
+							<div class="plot-container">{{ plot_html1 | safe }}</div>
 
 							<h2>Forecasted Prices</h2>
-							<div>{{ plot_html | safe }}</div>
+							<div class="plot-container">{{ plot_html | safe }}</div>
 							 
 
 							<h2>Forecasted Prices Components</h2>
 							<p>Consult the graphs below to identify the seasons by which home prices fluctuate throughout the year.</p>
-							<div>{{ components_html | safe }}</div>
+							<div class="plot-container">{{ components_html | safe }}</div>
 
 
 
