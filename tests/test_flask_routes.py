@@ -128,6 +128,47 @@ def test_forecast_route_renders_validation_errors():
     assert b'ERROR:' in response.data
 
 
+def test_analysis_api_serializes_address_result(monkeypatch):
+    import main
+
+    monkeypatch.setattr(main, 'resolve_analysis', lambda analysis_request: sample_analysis())
+
+    client = main.app.test_client()
+    response = client.post(
+        '/api/analysis',
+        json={
+            'address': '123 Main St, Austin, TX 78701',
+            'period': '10',
+            'period_unit': 'year',
+        },
+        headers={'Origin': 'https://housing-market-lab.sean-mulherin.chatgpt.site'},
+    )
+
+    assert response.status_code == 200
+    assert response.headers['Access-Control-Allow-Origin'] == 'https://housing-market-lab.sean-mulherin.chatgpt.site'
+    assert response.json['valuation']['price'] == 550000
+    assert response.json['comparables'][0]['formatted_address'].startswith('125 Main St')
+    assert response.json['market']['sfr_series'] == [
+        {'date': '2024-01-31', 'value': 500000.0},
+        {'date': '2024-02-29', 'value': 525000.0},
+    ]
+
+
+def test_analysis_api_returns_json_validation_error():
+    import main
+
+    client = main.app.test_client()
+    response = client.post('/api/analysis', json={
+        'city': 'Austin',
+        'state': 'XX',
+        'period': '10',
+        'period_unit': 'year',
+    })
+
+    assert response.status_code == 400
+    assert 'error' in response.json
+
+
 def test_comparable_values_plot_renders_image_without_comparables():
     import main
 

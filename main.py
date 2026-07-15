@@ -7,7 +7,7 @@ matplotlib.use('Agg')
 
 import matplotlib.pyplot as plt
 import numpy as np
-from flask import Flask, render_template, request
+from flask import Flask, jsonify, render_template, request
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
@@ -17,6 +17,23 @@ from zillow_data import ZillowDataError
 
 
 app = Flask(__name__, static_url_path='/static')
+
+ALLOWED_API_ORIGINS = {
+    'https://housing-market-lab.sean-mulherin.chatgpt.site',
+    'http://localhost:4174',
+    'http://127.0.0.1:4174',
+}
+
+
+@app.after_request
+def add_api_cors_headers(response):
+    origin = request.headers.get('Origin')
+    if origin in ALLOWED_API_ORIGINS:
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Vary'] = 'Origin'
+    return response
 
 
 def image_html_from_figure(fig, alt_text):
@@ -236,6 +253,36 @@ def forecast_plot(analysis, period_months):
     return image_html_from_figure(fig, 'Market forecast chart')
 
 
+def _serialize_series(series):
+    if series is None:
+        return []
+    return [
+        {'date': timestamp.date().isoformat(), 'value': float(value)}
+        for timestamp, value in series.dropna().items()
+    ]
+
+
+def _serialize_analysis(analysis):
+    market = analysis['market']
+    return {
+        'subject': analysis['subject'],
+        'valuation': analysis['valuation'],
+        'comparables': analysis.get('comparables', []),
+        'warnings': analysis.get('warnings', []),
+        'market': {
+            'location': market['location'],
+            'primary_label': market['primary_label'],
+            'latest_value': market['latest_value'],
+            'latest_date': market['latest_date'],
+            'lookback_percent_change': market['lookback_percent_change'],
+            'sfr_latest_value': market.get('sfr_latest_value', market['latest_value']),
+            'bedroom_latest_value': market.get('bedroom_latest_value'),
+            'sfr_series': _serialize_series(market['sfr_series']),
+            'bedroom_series': _serialize_series(market['bedroom_series']),
+        },
+    }
+
+
 @app.template_filter('currency')
 def currency(value):
     if value is None:
@@ -289,6 +336,21 @@ def forecast():
         period=analysis_request['period'],
         period_unit=analysis_request['period_unit'],
     )
+
+
+@app.route('/api/analysis', methods=['POST', 'OPTIONS'])
+def api_analysis():
+    if request.method == 'OPTIONS':
+        return ('', 204)
+
+    try:
+        payload = request.get_json(silent=True) or request.form
+        analysis_request = normalize_analysis_request(payload)
+        analysis = resolve_analysis(analysis_request)
+    except (ValidationError, ZillowDataError, RuntimeError) as exc:
+        return jsonify({'error': str(exc)}), 400
+
+    return jsonify(_serialize_analysis(analysis))
 
 
 if __name__ == '__main__':
