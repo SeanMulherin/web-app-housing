@@ -14,7 +14,7 @@ def resolve_analysis(analysis_request, market_data=None, rentcast_client=None):
     subject = _subject_from_request_and_rentcast(analysis_request, rentcast_result)
     location = _resolve_location(analysis_request, subject)
 
-    market = _get_market_result(location, analysis_request, market_data, warnings)
+    market = _get_market_result(location, analysis_request, subject, market_data, warnings)
     valuation = _valuation_from_rentcast_and_market(rentcast_result, market)
     comparables = rentcast_result.get('comparables', []) if rentcast_result else []
 
@@ -69,7 +69,7 @@ def _resolve_location(analysis_request, subject):
     raise ValidationError('City and state are required when address lookup cannot resolve a market.')
 
 
-def _get_market_result(location, analysis_request, market_data, warnings):
+def _get_market_result(location, analysis_request, subject, market_data, warnings):
     try:
         sfr_series, sfr_metadata = market_data.get_city_series(location, 'sfr')
     except (ValidationError, ZillowDataError):
@@ -77,7 +77,7 @@ def _get_market_result(location, analysis_request, market_data, warnings):
 
     bedroom_series = None
     bedroom_metadata = None
-    key = bedroom_series_key(analysis_request.get('bedrooms'))
+    key = bedroom_series_key(subject.get('bedrooms'))
     if key:
         try:
             bedroom_series, bedroom_metadata = market_data.get_city_series(location, key)
