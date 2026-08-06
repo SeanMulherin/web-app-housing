@@ -1,4 +1,5 @@
 import math
+from concurrent.futures import ThreadPoolExecutor
 
 from app_utils import ValidationError, normalize_location, percent_change
 from rentcast_client import RentCastAuthError, RentCastClient, RentCastError
@@ -32,18 +33,37 @@ def _get_rentcast_result(analysis_request, rentcast_client, warnings):
         warnings.append('No address was supplied, so the app is showing a market benchmark instead of an address-level AVM.')
         return None
 
-    try:
-        return rentcast_client.value_estimate(analysis_request)
-    except RentCastAuthError as exc:
-        warnings.append(str(exc))
-        return None
-    except RentCastError as exc:
-        warnings.append(str(exc))
-        return None
+    listing_lookup = getattr(rentcast_client, 'active_sale_listing', None)
+    if listing_lookup is None:
+        try:
+            return rentcast_client.value_estimate(analysis_request)
+        except (RentCastAuthError, RentCastError) as exc:
+            warnings.append(str(exc))
+            return None
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        valuation_future = executor.submit(rentcast_client.value_estimate, analysis_request)
+        listing_future = executor.submit(listing_lookup, analysis_request)
+        try:
+            result = valuation_future.result()
+        except (RentCastAuthError, RentCastError) as exc:
+            warnings.append(str(exc))
+            result = None
+        try:
+            listing = listing_future.result()
+        except (RentCastAuthError, RentCastError) as exc:
+            if str(exc) not in warnings:
+                warnings.append(str(exc))
+            listing = None
+
+    if result is not None:
+        result['active_listing'] = listing
+    return result
 
 
 def _subject_from_request_and_rentcast(analysis_request, rentcast_result):
     subject = rentcast_result.get('subject', {}) if rentcast_result else {}
+    active_listing = rentcast_result.get('active_listing') or {} if rentcast_result else {}
     return {
         'formatted_address': subject.get('formatted_address') or analysis_request.get('address'),
         'city': subject.get('city') or analysis_request.get('city'),
@@ -58,6 +78,11 @@ def _subject_from_request_and_rentcast(analysis_request, rentcast_result):
         'year_built': subject.get('year_built') if subject.get('year_built') is not None else analysis_request.get('year_built'),
         'last_sale_date': subject.get('last_sale_date'),
         'last_sale_price': subject.get('last_sale_price'),
+        'listing_status': active_listing.get('status'),
+        'listing_price': active_listing.get('price'),
+        'listed_date': active_listing.get('listed_date'),
+        'listing_last_seen_date': active_listing.get('last_seen_date'),
+        'days_on_market': active_listing.get('days_on_market'),
     }
 
 
