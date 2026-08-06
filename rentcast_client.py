@@ -9,6 +9,7 @@ from app_utils import ValidationError
 
 
 RENTCAST_VALUE_URL = 'https://api.rentcast.io/v1/avm/value'
+RENTCAST_SALE_LISTINGS_URL = 'https://api.rentcast.io/v1/listings/sale'
 
 
 class RentCastError(RuntimeError):
@@ -55,6 +56,19 @@ class RentCastClient:
 
         payload = self._get_json(RENTCAST_VALUE_URL, params)
         return normalize_value_response(payload)
+
+    def active_sale_listing(self, analysis_request):
+        if not self.api_key:
+            raise RentCastAuthError('Set RENTCAST_API_KEY to enable address-level valuation and comparables.')
+        if not analysis_request.get('address'):
+            raise ValidationError('Address is required for RentCast sale listing searches.')
+
+        payload = self._get_json(RENTCAST_SALE_LISTINGS_URL, {'address': analysis_request['address']})
+        listings = [normalize_property(listing) for listing in payload or []]
+        return next(
+            (listing for listing in listings if str(listing.get('status')).lower() == 'active' and listing.get('price')),
+            None,
+        )
 
     def _get_json(self, url, params):
         request_url = f'{url}?{urlencode(params)}'
