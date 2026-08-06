@@ -21,6 +21,10 @@ def sample_analysis(warnings=None):
             'year_built': 1990,
             'last_sale_price': 450000,
             'last_sale_date': '2021-01-01',
+            'listing_status': 'Active',
+            'listing_price': 535000,
+            'listed_date': '2026-07-15T00:00:00.000Z',
+            'days_on_market': 22,
         },
         'valuation': {
             'price': 550000,
@@ -147,6 +151,7 @@ def test_analysis_api_serializes_address_result(monkeypatch):
     assert response.status_code == 200
     assert response.headers['Access-Control-Allow-Origin'] == 'https://housing-market-lab.sean-mulherin.chatgpt.site'
     assert response.json['valuation']['price'] == 550000
+    assert response.json['subject']['listing_price'] == 535000
     assert response.json['comparables'][0]['formatted_address'].startswith('125 Main St')
     assert response.json['market']['sfr_series'] == [
         {'date': '2024-01-31', 'value': 500000.0},
