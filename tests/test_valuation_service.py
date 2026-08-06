@@ -19,6 +19,29 @@ class FakeRentCastClient:
         raise AssertionError('manual market benchmark should not call RentCast')
 
 
+class FakeAddressRentCastClient:
+    def value_estimate(self, analysis_request):
+        return {
+            'valuation': {'price': 560000, 'price_range_low': 530000, 'price_range_high': 590000, 'source': 'RentCast AVM'},
+            'subject': {
+                'formatted_address': analysis_request['address'],
+                'city': 'Austin',
+                'state': 'TX',
+                'bedrooms': 3,
+                'square_footage': 1800,
+            },
+            'comparables': [],
+        }
+
+    def active_sale_listing(self, analysis_request):
+        return {
+            'status': 'Active',
+            'price': 525000,
+            'listed_date': '2026-08-01T00:00:00.000Z',
+            'days_on_market': 5,
+        }
+
+
 def test_resolve_analysis_uses_market_benchmark_without_address():
     result = resolve_analysis(
         {
@@ -37,3 +60,21 @@ def test_resolve_analysis_uses_market_benchmark_without_address():
     assert result['valuation']['source'] == 'Zillow market benchmark'
     assert result['market']['primary_label'] == '3 bedroom homes'
     assert result['warnings'][0].startswith('No address was supplied')
+
+
+def test_resolve_analysis_includes_active_subject_listing():
+    result = resolve_analysis(
+        {
+            'address': '123 Main St, Austin, TX 78701',
+            'city': None,
+            'state': None,
+            'location': None,
+            'period_months': 12,
+        },
+        market_data=FakeMarketData(),
+        rentcast_client=FakeAddressRentCastClient(),
+    )
+
+    assert result['subject']['listing_status'] == 'Active'
+    assert result['subject']['listing_price'] == 525000
+    assert result['subject']['days_on_market'] == 5
