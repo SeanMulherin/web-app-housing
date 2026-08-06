@@ -1,6 +1,8 @@
 import base64
 import io
 import os
+import threading
+import time
 
 import matplotlib
 matplotlib.use('Agg')
@@ -17,6 +19,11 @@ from zillow_data import ZillowDataError
 
 
 app = Flask(__name__, static_url_path='/static')
+
+ANALYSIS_CACHE_TTL_SECONDS = int(os.getenv('HOUSING_ANALYSIS_TTL_SECONDS', '3600'))
+ANALYSIS_CACHE_MAX_ENTRIES = int(os.getenv('HOUSING_ANALYSIS_CACHE_MAX_ENTRIES', '256'))
+_ANALYSIS_CACHE = {}
+_ANALYSIS_CACHE_LOCK = threading.Lock()
 
 ALLOWED_API_ORIGINS = {
     'https://housing-market-lab.sean-mulherin.chatgpt.site',
@@ -283,6 +290,43 @@ def _serialize_analysis(analysis):
     }
 
 
+def _analysis_cache_key(analysis_request):
+    fields = (
+        'address', 'location', 'city', 'state', 'bedrooms', 'bathrooms',
+        'square_footage', 'lot_size', 'year_built', 'period_months',
+    )
+    return tuple((field, analysis_request.get(field)) for field in fields)
+
+
+def _get_cached_analysis(analysis_request):
+    key = _analysis_cache_key(analysis_request)
+    now = time.monotonic()
+    with _ANALYSIS_CACHE_LOCK:
+        cached = _ANALYSIS_CACHE.get(key)
+        if cached is None:
+            return None
+        expires_at, result = cached
+        if expires_at <= now:
+            _ANALYSIS_CACHE.pop(key, None)
+            return None
+        return result
+
+
+def _cache_analysis(analysis_request, result):
+    if ANALYSIS_CACHE_TTL_SECONDS <= 0:
+        return
+
+    key = _analysis_cache_key(analysis_request)
+    now = time.monotonic()
+    with _ANALYSIS_CACHE_LOCK:
+        expired = [cache_key for cache_key, (expires_at, _) in _ANALYSIS_CACHE.items() if expires_at <= now]
+        for cache_key in expired:
+            _ANALYSIS_CACHE.pop(cache_key, None)
+        while len(_ANALYSIS_CACHE) >= ANALYSIS_CACHE_MAX_ENTRIES:
+            _ANALYSIS_CACHE.pop(next(iter(_ANALYSIS_CACHE)))
+        _ANALYSIS_CACHE[key] = (now + ANALYSIS_CACHE_TTL_SECONDS, result)
+
+
 @app.template_filter('currency')
 def currency(value):
     if value is None:
@@ -346,11 +390,20 @@ def api_analysis():
     try:
         payload = request.get_json(silent=True) or request.form
         analysis_request = normalize_analysis_request(payload)
+        cached_result = _get_cached_analysis(analysis_request)
+        if cached_result is not None:
+            response = jsonify(cached_result)
+            response.headers['X-Analysis-Cache'] = 'HIT'
+            return response
         analysis = resolve_analysis(analysis_request)
     except (ValidationError, ZillowDataError, RuntimeError) as exc:
         return jsonify({'error': str(exc)}), 400
 
-    return jsonify(_serialize_analysis(analysis))
+    result = _serialize_analysis(analysis)
+    _cache_analysis(analysis_request, result)
+    response = jsonify(result)
+    response.headers['X-Analysis-Cache'] = 'MISS'
+    return response
 
 
 if __name__ == '__main__':
