@@ -90,3 +90,30 @@ def test_value_estimate_translates_auth_errors():
 
     with pytest.raises(RentCastAuthError):
         client.value_estimate({'address': '5500 Grand Lake Dr, San Antonio, TX 78244'})
+
+
+def test_active_sale_listing_returns_current_asking_price():
+    def opener(request, timeout):
+        assert 'listings/sale' in request.full_url
+        return FakeResponse([
+            {
+                'formattedAddress': '5500 Grand Lake Dr, San Antonio, TX 78244',
+                'status': 'Inactive',
+                'price': 240000,
+            },
+            {
+                'formattedAddress': '5500 Grand Lake Dr, San Antonio, TX 78244',
+                'status': 'Active',
+                'price': 265000,
+                'listedDate': '2026-08-01T00:00:00.000Z',
+                'daysOnMarket': 5,
+            },
+        ])
+
+    listing = RentCastClient(api_key='test-key', opener=opener).active_sale_listing({
+        'address': '5500 Grand Lake Dr, San Antonio, TX 78244',
+    })
+
+    assert listing['status'] == 'Active'
+    assert listing['price'] == 265000
+    assert listing['days_on_market'] == 5
