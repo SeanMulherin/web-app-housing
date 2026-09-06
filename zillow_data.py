@@ -1,8 +1,10 @@
 import os
+import tempfile
+from datetime import datetime, timezone
 import time
 from pathlib import Path
 from urllib.error import URLError
-from urllib.request import urlretrieve
+from urllib.request import urlopen
 
 import pandas as pd
 
@@ -54,24 +56,68 @@ def _is_fresh(path, ttl_seconds):
     return (time.time() - path.stat().st_mtime) < ttl_seconds
 
 
-def load_source_csv(series_key):
+def urlretrieve(url, path):
+    """Download with bounded waits, keeping the existing source-download seam."""
+    started = time.monotonic()
+    with urlopen(url, timeout=20) as response, open(path, 'wb') as target:
+        while True:
+            chunk = response.read(256 * 1024)
+            if not chunk:
+                return
+            target.write(chunk)
+            if time.monotonic() - started > 40:
+                raise TimeoutError('Zillow download exceeded the refresh time limit.')
+
+
+def _read_valid_source(path):
+    try:
+        frame = pd.read_csv(path)
+        dates = [column for column in frame.columns if _looks_like_date_column(column)]
+        if not {'RegionName', 'State'}.issubset(frame.columns) or not dates or frame.empty:
+            raise ValueError('missing city/state rows or dated value columns')
+        pd.to_datetime(dates, errors='raise')
+        # Reject successful HTTP responses containing HTML, empty data, or a changed schema.
+        if not any(pd.to_numeric(frame[column], errors='coerce').notna().any() for column in dates):
+            raise ValueError('no numeric housing values')
+        return frame
+    except Exception as exc:
+        raise ZillowDataError('Zillow source did not contain usable city housing data.') from exc
+
+
+def load_source_csv(series_key, force_refresh=False):
     path = _cache_path(series_key)
     path.parent.mkdir(parents=True, exist_ok=True)
     url = _series_url(series_key)
-
-    if not _is_fresh(path, _ttl_seconds()):
+    refresh_error = None
+    if force_refresh or not _is_fresh(path, _ttl_seconds()):
+        temporary_path = None
         try:
-            urlretrieve(url, path)
-        except (OSError, URLError) as exc:
+            with tempfile.NamedTemporaryFile(dir=path.parent, suffix='.csv', delete=False) as temporary:
+                temporary_path = Path(temporary.name)
+            urlretrieve(url, temporary_path)
+            _read_valid_source(temporary_path)
+            # Atomic replacement keeps a previous good source intact on failed/partial downloads.
+            os.replace(temporary_path, path)
+        except (OSError, URLError, ZillowDataError) as exc:
+            refresh_error = 'Zillow refresh failed; using the previously downloaded source.'
             if not path.exists():
                 raise ZillowDataError('Zillow housing data could not be loaded right now.') from exc
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
 
-    try:
-        frame = pd.read_csv(path)
-    except Exception as exc:
-        raise ZillowDataError('Cached Zillow housing data could not be read.') from exc
-
-    return frame, {'source_url': url, 'cache_path': str(path), 'fetched_at': path.stat().st_mtime}
+    frame = _read_valid_source(path)
+    fetched_at = path.stat().st_mtime
+    metadata = {
+        'source_url': url,
+        'cache_path': str(path),
+        'fetched_at': datetime.fromtimestamp(fetched_at, timezone.utc).isoformat(),
+        'cache_age_seconds': max(0, time.time() - fetched_at),
+        'stale': bool(refresh_error),
+    }
+    if refresh_error:
+        metadata['refresh_error'] = refresh_error
+    return frame, metadata
 
 
 def wide_zillow_to_city_series(frame, location):
@@ -121,8 +167,8 @@ def bedroom_series_key(bedrooms):
 
 
 class ZillowMarketData:
-    def get_city_series(self, location, series_key='sfr'):
-        frame, source_metadata = load_source_csv(series_key)
+    def get_city_series(self, location, series_key='sfr', force_refresh=False):
+        frame, source_metadata = load_source_csv(series_key, force_refresh=force_refresh)
         series, city_metadata = wide_zillow_to_city_series(frame, location)
         city_metadata.update(source_metadata)
         city_metadata['series_key'] = series_key

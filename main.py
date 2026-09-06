@@ -1,4 +1,6 @@
 import base64
+from copy import deepcopy
+from datetime import datetime, timezone
 import io
 import os
 import threading
@@ -27,6 +29,8 @@ _ANALYSIS_CACHE_LOCK = threading.Lock()
 
 ALLOWED_API_ORIGINS = {
     'https://housing-market-lab.sean-mulherin.chatgpt.site',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
     'http://localhost:4174',
     'http://127.0.0.1:4174',
 }
@@ -275,6 +279,7 @@ def _serialize_analysis(analysis):
         'subject': analysis['subject'],
         'valuation': analysis['valuation'],
         'comparables': analysis.get('comparables', []),
+        'neighborhood': analysis.get('neighborhood'),
         'warnings': analysis.get('warnings', []),
         'market': {
             'location': market['location'],
@@ -286,19 +291,31 @@ def _serialize_analysis(analysis):
             'bedroom_latest_value': market.get('bedroom_latest_value'),
             'sfr_series': _serialize_series(market['sfr_series']),
             'bedroom_series': _serialize_series(market['bedroom_series']),
+            'sources': {key: _public_source_metadata((market.get('metadata') or {}).get(key)) for key in ('sfr', 'bedroom')},
         },
     }
+
+
+def _public_source_metadata(metadata):
+    if not metadata:
+        return None
+    return {key: metadata.get(key) for key in (
+        'source_url', 'fetched_at', 'latest_date', 'stale', 'cache_age_seconds', 'refresh_error'
+    ) if key in metadata}
 
 
 def _analysis_cache_key(analysis_request):
     fields = (
         'address', 'location', 'city', 'state', 'bedrooms', 'bathrooms',
         'square_footage', 'lot_size', 'year_built', 'period_months',
+        'property_type', 'neighborhood_radius_miles', 'neighborhood_max_age_days',
     )
     return tuple((field, analysis_request.get(field)) for field in fields)
 
 
 def _get_cached_analysis(analysis_request):
+    if analysis_request.get('force_refresh') or ANALYSIS_CACHE_TTL_SECONDS <= 0:
+        return None
     key = _analysis_cache_key(analysis_request)
     now = time.monotonic()
     with _ANALYSIS_CACHE_LOCK:
@@ -309,11 +326,19 @@ def _get_cached_analysis(analysis_request):
         if expires_at <= now:
             _ANALYSIS_CACHE.pop(key, None)
             return None
+        result = deepcopy(result)
+        freshness = result.get('data_freshness')
+        if freshness is not None:
+            age = max(0, now - (expires_at - freshness['cache_ttl_seconds']))
+            freshness.update(cache_status='hit', cache_age_seconds=age)
+            for source in (result.get('market', {}).get('sources') or {}).values():
+                if source and source.get('cache_age_seconds') is not None:
+                    source['cache_age_seconds'] += age
         return result
 
 
 def _cache_analysis(analysis_request, result):
-    if ANALYSIS_CACHE_TTL_SECONDS <= 0:
+    if ANALYSIS_CACHE_TTL_SECONDS <= 0 or ANALYSIS_CACHE_MAX_ENTRIES <= 0:
         return
 
     key = _analysis_cache_key(analysis_request)
@@ -324,7 +349,7 @@ def _cache_analysis(analysis_request, result):
             _ANALYSIS_CACHE.pop(cache_key, None)
         while len(_ANALYSIS_CACHE) >= ANALYSIS_CACHE_MAX_ENTRIES:
             _ANALYSIS_CACHE.pop(next(iter(_ANALYSIS_CACHE)))
-        _ANALYSIS_CACHE[key] = (now + ANALYSIS_CACHE_TTL_SECONDS, result)
+        _ANALYSIS_CACHE[key] = (now + ANALYSIS_CACHE_TTL_SECONDS, deepcopy(result))
 
 
 @app.template_filter('currency')
@@ -400,6 +425,12 @@ def api_analysis():
         return jsonify({'error': str(exc)}), 400
 
     result = _serialize_analysis(analysis)
+    result['data_freshness'] = {
+        'retrieved_at': datetime.now(timezone.utc).isoformat(),
+        'cache_status': 'miss',
+        'cache_age_seconds': 0,
+        'cache_ttl_seconds': max(0, ANALYSIS_CACHE_TTL_SECONDS),
+    }
     _cache_analysis(analysis_request, result)
     response = jsonify(result)
     response.headers['X-Analysis-Cache'] = 'MISS'
