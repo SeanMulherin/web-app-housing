@@ -51,7 +51,7 @@ def test_normalize_analysis_request_accepts_address_only():
     assert result['city'] == 'San Antonio'
     assert result['state'] == 'TX'
     assert result['location'] == 'San Antonio, TX'
-    assert result['property_type'] == 'Single Family'
+    assert result['property_type'] is None
     assert result['period_months'] == 6
 
 

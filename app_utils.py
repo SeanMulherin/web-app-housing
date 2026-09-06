@@ -1,3 +1,4 @@
+import math
 import re
 
 
@@ -35,7 +36,7 @@ def parse_positive_integer(raw_value, field_name):
 
 
 def parse_optional_float(raw_value, field_name, minimum=None, maximum=None):
-    raw_text = str(raw_value or '').strip()
+    raw_text = str(raw_value if raw_value is not None else '').strip()
     if not raw_text:
         return None
 
@@ -44,6 +45,8 @@ def parse_optional_float(raw_value, field_name, minimum=None, maximum=None):
     except ValueError:
         raise ValidationError(f'{field_name} must be a number.')
 
+    if not math.isfinite(numeric_value):
+        raise ValidationError(f'{field_name} must be a finite number.')
     if minimum is not None and numeric_value < minimum:
         raise ValidationError(f'{field_name} must be at least {minimum}.')
     if maximum is not None and numeric_value > maximum:
@@ -53,7 +56,7 @@ def parse_optional_float(raw_value, field_name, minimum=None, maximum=None):
 
 
 def parse_optional_integer(raw_value, field_name, minimum=None, maximum=None):
-    raw_text = str(raw_value or '').strip()
+    raw_text = str(raw_value if raw_value is not None else '').strip()
     if not raw_text:
         return None
 
@@ -143,6 +146,20 @@ def normalize_analysis_request(form):
     acres = parse_optional_float(form.get('acres'), 'Acres', minimum=0, maximum=1000)
     year_built = parse_optional_integer(form.get('year_built'), 'Year built', minimum=1700, maximum=2100)
 
+    property_type = str(form.get('property_type') or '').strip() or None
+    if property_type not in {None, 'Single Family', 'Condo', 'Townhouse', 'Manufactured', 'Multi-Family', 'Apartment', 'Land'}:
+        raise ValidationError('Property type is not supported.')
+    force_refresh = form.get('force_refresh', False)
+    if isinstance(force_refresh, str):
+        force_refresh = force_refresh.strip().lower()
+        if force_refresh not in {'true', 'false'}:
+            raise ValidationError('Force refresh must be true or false.')
+        force_refresh = force_refresh == 'true'
+    elif not isinstance(force_refresh, bool):
+        raise ValidationError('Force refresh must be true or false.')
+    radius = parse_optional_float(form.get('neighborhood_radius_miles'), 'Neighborhood radius', minimum=0.1, maximum=5)
+    max_age = parse_optional_integer(form.get('neighborhood_max_age_days'), 'Neighborhood maximum age', minimum=1, maximum=365)
+
     return {
         'address': address or None,
         'city': city.title() if city else None,
@@ -154,7 +171,10 @@ def normalize_analysis_request(form):
         'acres': acres,
         'lot_size': acres * SQFT_PER_ACRE if acres is not None else None,
         'year_built': year_built,
-        'property_type': 'Single Family',
+        'property_type': property_type,
+        'force_refresh': force_refresh,
+        'neighborhood_radius_miles': radius if radius is not None else 1.0,
+        'neighborhood_max_age_days': max_age if max_age is not None else 180,
         'period': period,
         'period_unit': period_unit,
         'period_months': period_to_months(period, period_unit),

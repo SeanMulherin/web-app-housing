@@ -1,5 +1,6 @@
 import math
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 
 from app_utils import ValidationError, normalize_location, percent_change
 from rentcast_client import RentCastAuthError, RentCastClient, RentCastError
@@ -15,6 +16,7 @@ def resolve_analysis(analysis_request, market_data=None, rentcast_client=None):
     subject = _subject_from_request_and_rentcast(analysis_request, rentcast_result)
     location = _resolve_location(analysis_request, subject)
 
+    neighborhood = _get_neighborhood_result(analysis_request, subject, rentcast_client, warnings)
     market = _get_market_result(location, analysis_request, subject, market_data, warnings)
     valuation = _valuation_from_rentcast_and_market(rentcast_result, market)
     comparables = rentcast_result.get('comparables', []) if rentcast_result else []
@@ -24,6 +26,7 @@ def resolve_analysis(analysis_request, market_data=None, rentcast_client=None):
         'valuation': valuation,
         'market': market,
         'comparables': comparables,
+        'neighborhood': neighborhood,
         'warnings': warnings,
     }
 
@@ -31,59 +34,88 @@ def resolve_analysis(analysis_request, market_data=None, rentcast_client=None):
 def _get_rentcast_result(analysis_request, rentcast_client, warnings):
     if not analysis_request.get('address'):
         warnings.append('No address was supplied, so the app is showing a market benchmark instead of an address-level AVM.')
-        return None
+        return {'listing_lookup_status': 'unavailable'}
 
     listing_lookup = getattr(rentcast_client, 'active_sale_listing', None)
-    if listing_lookup is None:
-        try:
-            return rentcast_client.value_estimate(analysis_request)
-        except (RentCastAuthError, RentCastError) as exc:
-            warnings.append(str(exc))
-            return None
-
+    result = {}
     with ThreadPoolExecutor(max_workers=2) as executor:
         valuation_future = executor.submit(rentcast_client.value_estimate, analysis_request)
-        listing_future = executor.submit(listing_lookup, analysis_request)
+        listing_future = executor.submit(listing_lookup, analysis_request) if listing_lookup else None
         try:
-            result = valuation_future.result()
+            result = valuation_future.result() or {}
         except (RentCastAuthError, RentCastError) as exc:
-            warnings.append(str(exc))
-            result = None
-        try:
-            listing = listing_future.result()
-        except (RentCastAuthError, RentCastError) as exc:
-            if str(exc) not in warnings:
-                warnings.append(str(exc))
-            listing = None
-
-    if result is not None:
-        result['active_listing'] = listing
+            warnings.append(f'RentCast valuation: {exc}')
+            result['valuation_lookup_error'] = str(exc)
+        result['listing_lookup_status'] = 'unavailable'
+        if listing_future:
+            try:
+                listing = listing_future.result()
+                result['active_listing'] = listing
+                result['listing_lookup_status'] = 'found' if listing else 'not_found'
+            except (RentCastAuthError, RentCastError) as exc:
+                warnings.append(f'RentCast subject listing: {exc}')
+                result['listing_lookup_status'] = 'error'
+                result['listing_lookup_error'] = str(exc)
     return result
 
 
 def _subject_from_request_and_rentcast(analysis_request, rentcast_result):
-    subject = rentcast_result.get('subject', {}) if rentcast_result else {}
-    active_listing = rentcast_result.get('active_listing') or {} if rentcast_result else {}
-    return {
-        'formatted_address': subject.get('formatted_address') or analysis_request.get('address'),
-        'city': subject.get('city') or analysis_request.get('city'),
-        'state': subject.get('state') or analysis_request.get('state'),
-        'zip_code': subject.get('zip_code'),
-        'county': subject.get('county'),
-        'property_type': subject.get('property_type') or 'Single Family',
-        'bedrooms': subject.get('bedrooms') if subject.get('bedrooms') is not None else analysis_request.get('bedrooms'),
-        'bathrooms': subject.get('bathrooms') if subject.get('bathrooms') is not None else analysis_request.get('bathrooms'),
-        'square_footage': subject.get('square_footage') if subject.get('square_footage') is not None else analysis_request.get('square_footage'),
-        'lot_size': subject.get('lot_size') if subject.get('lot_size') is not None else analysis_request.get('lot_size'),
-        'year_built': subject.get('year_built') if subject.get('year_built') is not None else analysis_request.get('year_built'),
-        'last_sale_date': subject.get('last_sale_date'),
-        'last_sale_price': subject.get('last_sale_price'),
+    result = rentcast_result or {}
+    avm_subject = result.get('subject') or {}
+    active_listing = result.get('active_listing') or {}
+    subject = {}
+    sources = {}
+    for key in ('id', 'formatted_address', 'address_line_1', 'address_line_2', 'city', 'state', 'zip_code',
+                'county', 'latitude', 'longitude', 'property_type', 'bedrooms', 'bathrooms',
+                'square_footage', 'lot_size', 'year_built', 'last_sale_date', 'last_sale_price'):
+        request_key = 'address' if key == 'formatted_address' else key
+        if active_listing.get(key) is not None:
+            subject[key] = active_listing[key]
+            sources[key] = 'RentCast sale listing'
+        elif avm_subject.get(key) is not None:
+            subject[key] = avm_subject[key]
+            supplied_to_avm = key in {'property_type', 'bedrooms', 'bathrooms', 'square_footage'} and analysis_request.get(key) is not None
+            sources[key] = 'User supplied (used by RentCast AVM)' if supplied_to_avm else 'RentCast AVM subject'
+        else:
+            subject[key] = analysis_request.get(request_key)
+            if subject[key] is not None:
+                sources[key] = 'User supplied'
+    subject.update({
         'listing_status': active_listing.get('status'),
         'listing_price': active_listing.get('price'),
         'listed_date': active_listing.get('listed_date'),
         'listing_last_seen_date': active_listing.get('last_seen_date'),
         'days_on_market': active_listing.get('days_on_market'),
+        'listing_lookup_status': result.get('listing_lookup_status', 'unavailable'),
+        'attribute_sources': sources,
+    })
+    if result.get('listing_lookup_error'):
+        subject['listing_lookup_error'] = result['listing_lookup_error']
+    return subject
+
+
+def _get_neighborhood_result(analysis_request, subject, rentcast_client, warnings):
+    neighborhood = {
+        'listings': [], 'source': 'RentCast sale listings', 'status': 'unavailable',
+        'radius_miles': analysis_request.get('neighborhood_radius_miles', 1.0),
+        'max_age_days': analysis_request.get('neighborhood_max_age_days', 180),
+        'property_type': subject.get('property_type'), 'retrieved_at': None,
+        'has_more': False, 'excluded_older': 0, 'excluded_missing_dates': 0,
     }
+    lookup = getattr(rentcast_client, 'neighborhood_sale_listings', None)
+    if not lookup or not analysis_request.get('address'):
+        return neighborhood
+    try:
+        neighborhood = lookup(analysis_request, subject)
+        if neighborhood.get('has_more'):
+            warnings.append('Neighborhood listings reached the bounded search limit; this is a truncated sample, not every listing in the area.')
+        if neighborhood.get('excluded_missing_dates'):
+            warnings.append('Neighborhood listings without a usable last-seen date were excluded because their freshness could not be checked.')
+        return neighborhood
+    except (RentCastAuthError, RentCastError) as exc:
+        neighborhood.update(status='error', error=str(exc), retrieved_at=datetime.now(timezone.utc).isoformat())
+        warnings.append(f'RentCast neighborhood listings: {exc}')
+        return neighborhood
 
 
 def _resolve_location(analysis_request, subject):
@@ -95,8 +127,9 @@ def _resolve_location(analysis_request, subject):
 
 
 def _get_market_result(location, analysis_request, subject, market_data, warnings):
+    source_options = {'force_refresh': True} if analysis_request.get('force_refresh') else {}
     try:
-        sfr_series, sfr_metadata = market_data.get_city_series(location, 'sfr')
+        sfr_series, sfr_metadata = market_data.get_city_series(location, 'sfr', **source_options)
     except (ValidationError, ZillowDataError):
         raise
 
@@ -105,10 +138,14 @@ def _get_market_result(location, analysis_request, subject, market_data, warning
     key = bedroom_series_key(subject.get('bedrooms'))
     if key:
         try:
-            bedroom_series, bedroom_metadata = market_data.get_city_series(location, key)
+            bedroom_series, bedroom_metadata = market_data.get_city_series(location, key, **source_options)
             warnings.append('Bedroom-specific Zillow history includes all Zillow home types, so use it as a bedroom benchmark rather than a pure single-family segment.')
         except (ValidationError, ZillowDataError):
             warnings.append('Bedroom-specific Zillow history was not available, so the comparison uses all single-family homes.')
+
+    for source_name, metadata in (('single-family', sfr_metadata), ('bedroom', bedroom_metadata)):
+        if metadata and metadata.get('stale'):
+            warnings.append(f'Zillow {source_name} source: {metadata.get("refresh_error", "using a stale cached source")}')
 
     primary_series = bedroom_series if bedroom_series is not None else sfr_series
     primary_label = _series_label(key) if bedroom_series is not None else 'Single-family homes'
@@ -166,6 +203,7 @@ def _valuation_from_rentcast_and_market(rentcast_result, market):
             'price_range_high': None,
             'source': 'Zillow market benchmark',
             'as_of': market.get('latest_date'),
+            'retrieved_at': None,
             'relative_to_market_percent': None,
             'market_value': market_value,
         }
@@ -176,6 +214,7 @@ def _valuation_from_rentcast_and_market(rentcast_result, market):
         'price_range_high': valuation.get('price_range_high'),
         'source': valuation.get('source'),
         'as_of': valuation.get('as_of') or market.get('latest_date'),
+        'retrieved_at': valuation.get('retrieved_at'),
         'relative_to_market_percent': percent_change(price, market_value) if price and market_value else None,
         'market_value': market_value,
     }
