@@ -145,11 +145,11 @@ def test_analysis_api_serializes_address_result(monkeypatch):
             'period': '10',
             'period_unit': 'year',
         },
-        headers={'Origin': 'https://housing-market-lab.sean-mulherin.chatgpt.site'},
+        headers={'Origin': 'https://seanmulherin.github.io'},
     )
 
     assert response.status_code == 200
-    assert response.headers['Access-Control-Allow-Origin'] == 'https://housing-market-lab.sean-mulherin.chatgpt.site'
+    assert response.headers['Access-Control-Allow-Origin'] == 'https://seanmulherin.github.io'
     assert response.json['valuation']['price'] == 550000
     assert response.json['subject']['listing_price'] == 535000
     assert response.json['comparables'][0]['formatted_address'].startswith('125 Main St')
