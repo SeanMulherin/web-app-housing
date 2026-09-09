@@ -16,12 +16,13 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 from app_utils import ValidationError, normalize_analysis_request
+from finance_market_api import finance_market_api
 from valuation_service import resolve_analysis
 from zillow_data import ZillowDataError
 
 
 app = Flask(__name__, static_url_path='/static')
-
+app.register_blueprint(finance_market_api)
 ANALYSIS_CACHE_TTL_SECONDS = int(os.getenv('HOUSING_ANALYSIS_TTL_SECONDS', '3600'))
 ANALYSIS_CACHE_MAX_ENTRIES = int(os.getenv('HOUSING_ANALYSIS_CACHE_MAX_ENTRIES', '256'))
 _ANALYSIS_CACHE = {}
@@ -42,7 +43,7 @@ def add_api_cors_headers(response):
     if origin in ALLOWED_API_ORIGINS:
         response.headers['Access-Control-Allow-Origin'] = origin
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
         response.headers['Vary'] = 'Origin'
     return response
 
