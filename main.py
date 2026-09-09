@@ -28,7 +28,7 @@ _ANALYSIS_CACHE = {}
 _ANALYSIS_CACHE_LOCK = threading.Lock()
 
 ALLOWED_API_ORIGINS = {
-    'https://housing-market-lab.sean-mulherin.chatgpt.site',
+    'https://seanmulherin.github.io',
     'http://localhost:3000',
     'http://127.0.0.1:3000',
     'http://localhost:4174',
