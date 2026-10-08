@@ -1,6 +1,6 @@
 # RentCast billing and abuse safeguards
 
-Every outbound RentCast attempt reserves one unit in a durable SQLite ledger
+Every outbound RentCast attempt reserves one unit in a durable database ledger
 before networking. The cap covers all valuation, subject-listing, and neighborhood
 pagination calls, including the JSON `/api/analysis` and HTML `/forecast` routes.
 Concurrent workers share the counter; timeouts, failed requests, and interrupted
@@ -12,8 +12,11 @@ be raised through environment settings. It treats every outbound attempt as a
 billable **$0.20 request**, without assuming any unused free quota. This means at
 most **25 attempts in any rolling 32 days**; the extra day covers a 31-day billing
 month and daylight-saving changes. Failed attempts also consume this allowance.
-Existing ledger reservations count toward both limits, without a reset or schema
-migration. A lower configured request allowance still takes precedence.
+Existing reservations in the same ledger count toward both limits without a
+reset. A lower configured request allowance still takes precedence. Switching
+storage backends does not automatically import history: retain all applicable
+attempt timestamps, or keep the new allowance at zero and reconcile prior usage
+before enabling the new ledger. Never switch ledgers to replenish an allowance.
 
 The $0.20 upper bound comes from RentCast's published pricing, verified October 7,
 2026: <https://www.rentcast.io/api>. Verify it against the actual subscription
@@ -25,7 +28,61 @@ The default allowance is **zero**. Missing, corrupt, locked, or uninitialized
 storage blocks new analyses with HTTP 503; exhaustion returns HTTP 429. Runtime
 code never creates an empty replacement ledger or falls back to memory.
 
-## Production setup
+## Production setup on free Render
+
+Render's free web service can use an external Supabase Free Postgres database.
+It needs no Render persistent disk or paid compute upgrade. Keep the Supabase
+organization on the **Free** plan; creating a project in a paid organization
+could introduce compute charges. Use a separate housing project, so its
+server-side credential cannot access unrelated finance data.
+
+1. Create the housing project in a Free organization. Keep the Data API enabled,
+   and disable "Automatically expose new tables."
+2. As the database owner, run `sql/housing_safety.sql` once in the SQL Editor.
+   Bootstrap refuses an existing ledger schema or RPC signature and rolls back
+   without replacing stored history. Save its generated `ledger_id`.
+3. Configure these **backend-only** Render environment variables:
+
+   ```text
+   HOUSING_SAFETY_BACKEND=supabase
+   HOUSING_SAFETY_SUPABASE_URL=https://<project-reference>.supabase.co
+   HOUSING_SAFETY_SUPABASE_KEY=<housing-project sb_secret key>
+   HOUSING_SAFETY_LEDGER_ID=<generated UUID>
+   HOUSING_RENTCAST_MAX_REQUESTS_31D=0
+   ```
+
+   Never put the secret key in GitHub, frontend code, screenshots, or logs.
+   The adapter sends it only to the exact configured Supabase project over HTTPS.
+   It rejects redirects and performs no automatic retries. It never falls back
+   to SQLite or memory. A missing ledger, changed ledger identity, paused database,
+   transport failure, or ambiguous response blocks RentCast calls.
+4. Verify the database identity, permissions, counts, and live rejection behavior
+   with the allowance at zero. Check the actual RentCast plan and current usage
+   before enabling a conservative remaining request allowance (at most 25).
+   Both rate limits and the fixed 25-attempt ceiling are enforced inside Postgres.
+   The database supplies time and serializes admissions with a shared row lock.
+   Only a committed, validated response permits the backend to call RentCast.
+5. Redeploy the backend and verify that the same database identity and request
+   count remain. Counter storage is independent of Render restarts and redeploys.
+
+The private `housing_safety` schema is not exposed by the Data API. Public RPCs
+are callable only by the server's `service_role`, including modern secret keys.
+Anonymous and signed-in public users have no execution or table access. The
+server credential cannot directly change or delete private ledger tables through
+the Data API; RPCs provide admission, reservation, and read-only status only.
+
+Supabase Free can pause projects after a week of inactivity and has usage limits.
+The app blocks paid lookups while the database is unavailable; an outage never
+resets or bypasses its budget. Resume the **same** project and ledger. Do not
+create an empty replacement to recover quota. Free Supabase does not include
+automatic backups. Any restoration or storage loss requires reconciling RentCast
+usage with the allowance kept at zero before re-enabling paid requests.
+
+## Optional SQLite setup with persistent storage
+
+The existing SQLite backend remains available for local development or a server
+with durable storage. It is not suitable for Render's ephemeral free filesystem.
+Set `HOUSING_SAFETY_BACKEND=sqlite` (also the default) to select it explicitly.
 
 1. Mount a persistent disk on the backend (for example `/var/data` on Render).
    All Gunicorn workers must use the same ledger. Use a single service instance

@@ -79,7 +79,7 @@ def analysis_request_too_large(error):
 @app.after_request
 def add_api_cors_headers(response):
     if request.path in {'/', '/api/analysis', '/forecast'}:
-        response.headers['X-Housing-Safety-Version'] = '2026-10-08-v1'
+        response.headers['X-Housing-Safety-Version'] = '2026-10-08-v2'
     origin = request.headers.get('Origin')
     if origin in ALLOWED_API_ORIGINS:
         response.headers['Access-Control-Allow-Origin'] = origin

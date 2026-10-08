@@ -144,7 +144,7 @@ def test_preflight_does_not_need_a_ledger_or_paid_calls(monkeypatch):
     monkeypatch.delenv('HOUSING_SAFETY_DB_PATH')
     response = main.app.test_client().options('/api/analysis', headers={'Origin': 'https://seanmulherin.github.io'})
     assert response.status_code == 204
-    assert response.headers['X-Housing-Safety-Version'] == '2026-10-08-v1'
+    assert response.headers['X-Housing-Safety-Version'] == '2026-10-08-v2'
     assert response.headers['Access-Control-Allow-Origin'] == 'https://seanmulherin.github.io'
 
 

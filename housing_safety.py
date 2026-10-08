@@ -61,6 +61,21 @@ def _configured_integer(name, default, minimum=0):
 
 
 def configured_store():
+    backend = os.environ.get('HOUSING_SAFETY_BACKEND', 'sqlite')
+    if backend == 'supabase':
+        # Import lazily to retain the existing standalone SQLite bootstrap.
+        from supabase_safety import SupabaseSafetyStore
+        return SupabaseSafetyStore(
+            os.environ.get('HOUSING_SAFETY_SUPABASE_URL', ''),
+            os.environ.get('HOUSING_SAFETY_SUPABASE_KEY', ''),
+            os.environ.get('HOUSING_SAFETY_LEDGER_ID', ''),
+            max_requests=_configured_integer('HOUSING_RENTCAST_MAX_REQUESTS_31D', 0),
+            visitor_per_minute=_configured_integer('HOUSING_VISITOR_REQUESTS_PER_MINUTE', 3, 1),
+            visitor_per_day=_configured_integer('HOUSING_VISITOR_REQUESTS_PER_DAY', 20, 1),
+            global_per_minute=_configured_integer('HOUSING_GLOBAL_REQUESTS_PER_MINUTE', 60, 1),
+        )
+    if backend != 'sqlite':
+        raise SafetyBlocked('Property lookups are unavailable because safety settings are invalid.')
     path = os.environ.get('HOUSING_SAFETY_DB_PATH', '')
     if not path or not Path(path).is_absolute():
         raise SafetyBlocked('Property lookups are unavailable until persistent safety storage is configured.')

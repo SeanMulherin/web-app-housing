@@ -8,6 +8,10 @@ def isolated_safety_ledger(monkeypatch, tmp_path_factory):
     """Every test uses a real disposable ledger, never the production allowance."""
     path = tmp_path_factory.mktemp('admission') / 'ledger.sqlite3'
     initialize_database(path)
+    # Tests never inherit a production remote database or its credentials.
+    monkeypatch.setenv('HOUSING_SAFETY_BACKEND', 'sqlite')
+    for name in ('HOUSING_SAFETY_SUPABASE_URL', 'HOUSING_SAFETY_SUPABASE_KEY', 'HOUSING_SAFETY_LEDGER_ID'):
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv('HOUSING_SAFETY_DB_PATH', str(path))
     monkeypatch.setenv('HOUSING_RENTCAST_MAX_REQUESTS_31D', '1000')
     monkeypatch.setenv('HOUSING_VISITOR_REQUESTS_PER_MINUTE', '1000')
