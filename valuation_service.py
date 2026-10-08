@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from app_utils import ValidationError, normalize_location, percent_change
+from housing_safety import SafetyBlocked
 from rentcast_client import RentCastAuthError, RentCastClient, RentCastError
 from zillow_data import ZillowDataError, ZillowMarketData, bedroom_series_key
 
@@ -41,8 +42,11 @@ def _get_rentcast_result(analysis_request, rentcast_client, warnings):
     with ThreadPoolExecutor(max_workers=2) as executor:
         valuation_future = executor.submit(rentcast_client.value_estimate, analysis_request)
         listing_future = executor.submit(listing_lookup, analysis_request) if listing_lookup else None
+        safety_error = None
         try:
             result = valuation_future.result() or {}
+        except SafetyBlocked as exc:
+            safety_error = exc
         except (RentCastAuthError, RentCastError) as exc:
             warnings.append(f'RentCast valuation: {exc}')
             result['valuation_lookup_error'] = str(exc)
@@ -52,10 +56,14 @@ def _get_rentcast_result(analysis_request, rentcast_client, warnings):
                 listing = listing_future.result()
                 result['active_listing'] = listing
                 result['listing_lookup_status'] = 'found' if listing else 'not_found'
+            except SafetyBlocked as exc:
+                safety_error = safety_error or exc
             except (RentCastAuthError, RentCastError) as exc:
                 warnings.append(f'RentCast subject listing: {exc}')
                 result['listing_lookup_status'] = 'error'
                 result['listing_lookup_error'] = str(exc)
+        if safety_error:
+            raise safety_error
     return result
 
 

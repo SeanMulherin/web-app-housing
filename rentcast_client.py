@@ -5,9 +5,10 @@ import os
 from datetime import datetime, timedelta, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from app_utils import ValidationError
+from housing_safety import configured_store
 
 
 RENTCAST_VALUE_URL = 'https://api.rentcast.io/v1/avm/value'
@@ -30,10 +31,16 @@ def _timeout_seconds():
         return 10
 
 
+class _RejectRedirects(HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, message, headers, new_url):
+        return None
+
+
 class RentCastClient:
     def __init__(self, api_key=None, opener=None):
         self.api_key = api_key if api_key is not None else os.getenv('RENTCAST_API_KEY')
-        self.opener = opener or urlopen
+        # Redirects could leak the key or produce extra unreserved HTTP requests.
+        self.opener = opener or build_opener(_RejectRedirects()).open
 
     def value_estimate(self, analysis_request):
         if not self.api_key:
@@ -142,6 +149,7 @@ class RentCastClient:
             headers={'accept': 'application/json', 'X-Api-Key': self.api_key},
             method='GET',
         )
+        configured_store().reserve_rentcast_request()
         try:
             with self.opener(request, timeout=_timeout_seconds()) as response:
                 return json.loads(response.read().decode('utf-8'))

@@ -37,7 +37,7 @@ def clear_cache():
     main._ANALYSIS_CACHE.clear()
 
 
-def test_api_freshness_force_refresh_replaces_regular_cache(monkeypatch):
+def test_api_freshness_public_refresh_preserves_regular_cache(monkeypatch):
     calls = []
     monkeypatch.setattr(main, 'resolve_analysis', lambda request: calls.append(request.copy()) or series_result())
     now = [100.0]
@@ -54,11 +54,11 @@ def test_api_freshness_force_refresh_replaces_regular_cache(monkeypatch):
     assert cached['market']['sources']['sfr']['cache_age_seconds'] == 20
     assert 'cache_path' not in cached['market']['sources']['sfr']
     assert cached['market']['sources']['sfr']['stale'] is True
-    fresh = client.post('/api/analysis', json={**REQUEST, 'force_refresh': True}).json
-    assert fresh['data_freshness']['cache_status'] == 'miss'
-    assert calls[-1]['force_refresh'] is True
+    refresh = client.post('/api/analysis', json={**REQUEST, 'force_refresh': True})
+    assert refresh.status_code == 403
+    assert 'disabled' in refresh.json['error']
     client.post('/api/analysis', json=REQUEST)
-    assert len(calls) == 2
+    assert len(calls) == 1
 
 
 def test_cache_isolation_and_expiry(monkeypatch):

@@ -16,12 +16,14 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 from app_utils import ValidationError, normalize_analysis_request
+from housing_safety import SafetyBlocked, configured_store
 from finance_market_api import finance_market_api
 from valuation_service import resolve_analysis
 from zillow_data import ZillowDataError
 
 
 app = Flask(__name__, static_url_path='/static')
+app.config['MAX_CONTENT_LENGTH'] = 8192
 app.register_blueprint(finance_market_api)
 ANALYSIS_CACHE_TTL_SECONDS = int(os.getenv('HOUSING_ANALYSIS_TTL_SECONDS', '3600'))
 ANALYSIS_CACHE_MAX_ENTRIES = int(os.getenv('HOUSING_ANALYSIS_CACHE_MAX_ENTRIES', '256'))
@@ -37,8 +39,47 @@ ALLOWED_API_ORIGINS = {
 }
 
 
+def _safety_response(error):
+    if request.path == '/api/analysis':
+        response = jsonify({'error': str(error)})
+    else:
+        response = app.make_response(render_template('result.html', error=f'ERROR: {error}'))
+    response.status_code = error.status_code
+    response.headers['Cache-Control'] = 'no-store'
+    if error.retry_after is not None:
+        response.headers['Retry-After'] = str(error.retry_after)
+    return response
+
+
+@app.before_request
+def protect_analysis_requests():
+    if request.method != 'POST' or request.path not in {'/api/analysis', '/forecast'}:
+        return None
+    try:
+        payload = (request.get_json(silent=True) or request.form) if request.path == '/api/analysis' else request.form
+        if not hasattr(payload, 'get'):
+            raise SafetyBlocked('Analysis input must be an object.', 400)
+        # Do not trust caller-supplied X-Forwarded-For; behind a proxy, visitors
+        # may share a bucket until the deployment's trusted proxy is configured.
+        configured_store().check_visitor(request.remote_addr)
+        refresh = payload.get('force_refresh', False)
+        if refresh is True or (isinstance(refresh, str) and refresh.strip().lower() == 'true'):
+            raise SafetyBlocked('Public refresh requests are disabled. Please use the cached analysis.', 403)
+    except SafetyBlocked as exc:
+        return _safety_response(exc)
+
+
+@app.errorhandler(413)
+def analysis_request_too_large(error):
+    if request.path == '/api/analysis':
+        return jsonify({'error': 'Analysis request is too large.'}), 413
+    return error
+
+
 @app.after_request
 def add_api_cors_headers(response):
+    if request.path in {'/', '/api/analysis', '/forecast'}:
+        response.headers['X-Housing-Safety-Version'] = '2026-10-08-v1'
     origin = request.headers.get('Origin')
     if origin in ALLOWED_API_ORIGINS:
         response.headers['Access-Control-Allow-Origin'] = origin
@@ -394,6 +435,8 @@ def forecast():
         market_plot_html = market_history_plot(analysis)
         comparable_plot_html = comparable_values_plot(analysis)
         forecast_plot_html = forecast_plot(analysis, analysis_request['period_months'])
+    except SafetyBlocked as exc:
+        return _safety_response(exc)
     except (ValidationError, ZillowDataError, RuntimeError) as exc:
         return render_template('result.html', error=f'ERROR: {exc}')
 
@@ -422,6 +465,8 @@ def api_analysis():
             response.headers['X-Analysis-Cache'] = 'HIT'
             return response
         analysis = resolve_analysis(analysis_request)
+    except SafetyBlocked as exc:
+        return _safety_response(exc)
     except (ValidationError, ZillowDataError, RuntimeError) as exc:
         return jsonify({'error': str(exc)}), 400
 
