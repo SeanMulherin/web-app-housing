@@ -152,6 +152,24 @@ analysis cache. Request bodies are limited to 8 KiB.
 
 ## Verification
 
+For a read-only Supabase ledger check, run `python diagnose_safety.py` in the
+backend environment. It calls only `housing_safety_status`, prints the two attempt
+counts, and makes no RentCast request or admission/reservation. Exit code 0 means
+the status check succeeded, 1 means unavailable, and 2 means SQLite is selected.
+A successful status check does not verify the separate admit/reserve RPCs.
+
+Server logs classify Supabase failures without logging credentials, remote
+response bodies, URLs, or visitor addresses:
+
+- `category=http status=401` or `403`: check the backend secret and RPC permissions.
+- `category=http status=404`: check that the RPC exists and the Data API exposes it.
+- `category=transport`: check project availability and backend connectivity.
+- `category=invalid_response`: the response failed strict protocol validation.
+- `reason=storage`: check the existing ledger identity and database RPC behavior.
+
+HTTP status alone is a clue, not a complete diagnosis. Resume or repair the same
+project and ledger; never bootstrap a replacement to work around an outage.
+
 ```sh
 python -m pytest -q
 ```
@@ -160,3 +178,4 @@ Tests cover concurrent processes, restart persistence, missing/uninitialized/
 corrupt storage, reservation before networking, failed attempts, every RentCast
 method, both public endpoints, public refresh denial, forwarded-header spoofing,
 cache hits, and explicit 429/503 responses. No live RentCast requests are needed.
+
