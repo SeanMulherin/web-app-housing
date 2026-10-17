@@ -8,15 +8,17 @@ The database owns the clock, serializes admissions, and enforces the fixed cap.
 import hashlib
 from http.client import HTTPException
 import json
+import logging
 import re
 import uuid
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from housing_safety import SafetyBlocked
 
 
 _UNAVAILABLE = 'Property lookup safety storage is unavailable. Please try again later.'
+logger = logging.getLogger(__name__)
 _MESSAGES = {
     'spend': 'The $5 monthly property lookup budget has been reached. Please try again later.',
     'budget': 'The property lookup request budget has been reached. Please try again later.',
@@ -101,10 +103,21 @@ class SupabaseSafetyStore:
                 return result
             if reason not in _MESSAGES:
                 raise ValueError
-        except (URLError, OSError, HTTPException, ValueError, TypeError, KeyError):
+        except HTTPError as exc:
+            # Status alone is useful for operators; exception text and response
+            # bodies can contain credentials and must never enter logs.
+            logger.warning('Housing safety RPC failed: function=%s category=http status=%s', function, exc.code)
+            raise SafetyBlocked(_UNAVAILABLE) from None
+        except (URLError, OSError, HTTPException):
+            logger.warning('Housing safety RPC failed: function=%s category=transport', function)
+            raise SafetyBlocked(_UNAVAILABLE) from None
+        except (ValueError, TypeError, KeyError):
+            logger.warning('Housing safety RPC failed: function=%s category=invalid_response', function)
             # Do not expose remote error bodies, headers, URLs, or secrets.
             raise SafetyBlocked(_UNAVAILABLE) from None
         status_code = 429 if reason in ('spend', 'budget', 'rate') else 503
+        if reason in ('settings', 'storage'):
+            logger.warning('Housing safety RPC denied: function=%s reason=%s', function, reason)
         raise SafetyBlocked(_MESSAGES[reason], status_code, retry)
 
     def reserve_rentcast_request(self):
@@ -129,3 +142,4 @@ class SupabaseSafetyStore:
         if result['attempt_count31d'] > result['attempt_count32d']:
             raise SafetyBlocked(_UNAVAILABLE)
         return result
+
