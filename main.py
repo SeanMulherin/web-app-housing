@@ -1,6 +1,7 @@
 import base64
 from copy import deepcopy
 from datetime import datetime, timezone
+import hmac
 import io
 import os
 import threading
@@ -74,6 +75,32 @@ def analysis_request_too_large(error):
     if request.path == '/api/analysis':
         return jsonify({'error': 'Analysis request is too large.'}), 413
     return error
+
+
+@app.route('/health/housing-safety', methods=['GET'])
+def housing_safety_health():
+    """Probe the configured safety ledger without admitting or reserving work."""
+    configured_token = os.getenv('HOUSING_HEALTHCHECK_TOKEN', '')
+    supplied_authorization = request.headers.get('Authorization', '')
+
+    if len(configured_token) < 32 or any(character.isspace() for character in configured_token):
+        response = app.make_response(('', 503))
+    elif not hmac.compare_digest(supplied_authorization, f'Bearer {configured_token}'):
+        response = app.make_response(('', 401))
+    else:
+        try:
+            store = configured_store()
+            read_status = getattr(store, 'status', None)
+            if not callable(read_status):
+                raise SafetyBlocked('Safety status is unavailable.')
+            read_status()
+        except SafetyBlocked:
+            response = app.make_response(('', 503))
+        else:
+            response = app.make_response(('', 204))
+
+    response.headers['Cache-Control'] = 'no-store'
+    return response
 
 
 @app.after_request

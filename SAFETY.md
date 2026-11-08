@@ -71,6 +71,35 @@ Anonymous and signed-in public users have no execution or table access. The
 server credential cannot directly change or delete private ledger tables through
 the Data API; RPCs provide admission, reservation, and read-only status only.
 
+## Read-only production health monitor
+
+The backend exposes `GET /health/housing-safety` for an unattended availability
+check. The route calls only the configured store's read-only `status()` method;
+it never calls RentCast, admits a visitor, or reserves an attempt. A successful
+check returns an empty HTTP 204 response. Authentication, configuration, or
+ledger failures return an empty non-2xx response, without exposing the ledger
+UUID, rolling counts, database errors, or credentials.
+
+Set a random token of at least 32 non-whitespace characters as the backend-only
+`HOUSING_HEALTHCHECK_TOKEN`. The monitor must send the same value as
+`Authorization: Bearer <token>`. Keep this token separate from every provider
+credential and rotate it independently.
+
+The GitHub Actions workflow `.github/workflows/housing-safety-health.yml` calls
+the deployed endpoint four times per day. Configure these repository secrets:
+
+```text
+HOUSING_HEALTHCHECK_URL=https://web-app-housing.onrender.com/health/housing-safety
+HOUSING_HEALTHCHECK_TOKEN=<the same dedicated monitor token configured on Render>
+```
+
+Never store `HOUSING_SAFETY_SUPABASE_KEY`, a RentCast key, or the ledger UUID in
+GitHub Actions. The workflow is an external read-only probe of the deployed app,
+not a database client and not evidence of available paid RentCast capacity.
+GitHub may disable scheduled workflows in an inactive public repository, so use
+an independent HTTP monitor with a private authorization header as the durable
+primary monitor if the repository can go 60 days without activity.
+
 Supabase Free can pause projects after a week of inactivity and has usage limits.
 The app blocks paid lookups while the database is unavailable; an outage never
 resets or bypasses its budget. Resume the **same** project and ledger. Do not

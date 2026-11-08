@@ -1,0 +1,46 @@
+name: Housing safety health check
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 1,7,13,19 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: housing-safety-health
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check deployed safety ledger
+        env:
+          HEALTH_URL: ${{ secrets.HOUSING_HEALTHCHECK_URL }}
+          HEALTH_TOKEN: ${{ secrets.HOUSING_HEALTHCHECK_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${HEALTH_URL}"
+          test -n "${HEALTH_TOKEN}"
+          case "${HEALTH_URL}" in
+            https://*) ;;
+            *) exit 1 ;;
+          esac
+          curl \
+            --proto '=https' \
+            --silent \
+            --show-error \
+            --fail \
+            --output /dev/null \
+            --connect-timeout 10 \
+            --max-time 45 \
+            --retry 3 \
+            --retry-all-errors \
+            --retry-delay 10 \
+            --retry-max-time 180 \
+            --header "Authorization: Bearer ${HEALTH_TOKEN}" \
+            "${HEALTH_URL}"
